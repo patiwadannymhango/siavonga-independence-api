@@ -32,6 +32,11 @@ services:
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/media
+    # 2 workers, not the Dockerfile's default 3 — tuned for a small
+    # (~1GB RAM) instance shared with Postgres and Caddy. Raise this (and
+    # the instance size) if registration traffic warrants it.
+    command: >
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60
 
   # The frontend deploys separately (e.g. Vercel) and talks to this
   # backend over a real cross-origin request, so CORS_ALLOWED_ORIGINS in
