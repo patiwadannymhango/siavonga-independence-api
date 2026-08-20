@@ -1,0 +1,38 @@
+# Single-origin, no-domain deployment for the backend API only. The
+# frontend deploys separately (e.g. Vercel) and talks to this backend
+# cross-origin — see CORS_ALLOWED_ORIGINS in backend/.env.
+#
+# Everything below is served from one address — localhost, a LAN IP, a
+# cloud server's public IP, an sslip.io hostname, or a real domain,
+# whatever SITE_ADDRESS (set in .env.prod) points at:
+#
+#   http://<address>/api/v1/...     → Django REST API
+#   http://<address>/django-admin   → Django's built-in admin site
+#   http://<address>/static|/media  → Django static + uploaded files
+#
+# SITE_ADDRESS defaults to `:80` (matches any hostname, no TLS — fine for
+# local dev or a bare IP). Set it to an https:// hostname (an sslip.io
+# address or a real domain pointed at your server) to get Caddy to
+# automatically fetch a real Let's Encrypt cert and serve HTTPS instead.
+
+{$SITE_ADDRESS::80} {
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+	}
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /django-admin/* {
+		reverse_proxy backend:8000
+	}
+
+	# Nothing else lives at this origin — the frontend deploys
+	# separately. Unmatched paths 404, which is correct.
+}

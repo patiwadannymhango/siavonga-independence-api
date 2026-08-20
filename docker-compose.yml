@@ -1,0 +1,56 @@
+name: siavonga-run-dev
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-siavonga_run}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      # Host port 5433, not 5432 — avoids clashing with a Postgres
+      # already running natively on this machine. The backend container
+      # still talks to this db over the internal Docker network at
+      # db:5432 regardless; this mapping is only for reaching it with a
+      # local tool (psql, DBeaver, etc) at localhost:5433.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DEBUG: "True"
+      ALLOWED_HOSTS: "*"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:5174"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Host port 8001, not 8000 — avoids clashing with another Django
+      # project's dev container that may already be using 8000 on this
+      # machine. The API is reachable at http://localhost:8001/api/v1/...
+      - "8001:8000"
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "python manage.py runserver 0.0.0.0:8000"
+
+  # The frontend (siavonga-inpendence-run-2026-site) runs separately via
+  # `npm run dev` on its own machine/port (fast hot-reload, no rebuild
+  # needed) and talks to this backend at http://localhost:8000/api/v1/...
+  # cross-origin — see CORS_ALLOWED_ORIGINS above and the root README.
+
+volumes:
+  db_data:

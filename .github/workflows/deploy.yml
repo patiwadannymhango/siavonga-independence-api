@@ -1,0 +1,25 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_SSH_USER }}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.SERVER_PROJECT_PATH }}
+            git pull origin main
+            # --env-file is required: compose only auto-loads `.env`, and
+            # the DB credentials live in `.env.prod`.
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+            docker image prune -f
