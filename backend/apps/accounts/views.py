@@ -1,10 +1,12 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+
+from apps.common.permissions import IsAdminRole, IsStaffRole
 
 from .models import User
 from .serializers import (
@@ -61,15 +63,17 @@ class ChangePasswordView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Admin-facing views — superuser-only user management. There is no
-# self-registration or invite flow; only an existing superuser can create
-# other admin accounts (e.g. `python manage.py createsuperuser` for the
-# first one).
+# Admin-facing views — user management. Both roles (ADMIN and VIEW) can
+# see the account list; only ADMIN can create, edit, or deactivate one —
+# a VIEW account granting itself or anyone else ADMIN would defeat the
+# whole point of a read-only role. There is no self-registration or
+# invite flow; the very first account is made with
+# `python manage.py createsuperuser`.
 # ---------------------------------------------------------------------------
 
 
 class AdminUserListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffRole]
     serializer_class = AdminUserSerializer
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["email", "first_name", "last_name"]
@@ -78,7 +82,7 @@ class AdminUserListView(generics.ListAPIView):
 
 
 class AdminUserCreateView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
     def post(self, request):
         serializer = AdminUserCreateSerializer(data=request.data)
@@ -89,12 +93,16 @@ class AdminUserCreateView(APIView):
 
 class AdminUserDetailView(APIView):
     """
-    GET/PATCH/DELETE /api/v1/auth/admin/users/<user_id>/
-
-    DELETE deactivates (is_active=False) rather than hard-deleting.
+    GET    /api/v1/auth/admin/users/<user_id>/ — either role
+    PATCH   /api/v1/auth/admin/users/<user_id>/ — ADMIN only
+    DELETE /api/v1/auth/admin/users/<user_id>/ — ADMIN only, deactivates
+    (is_active=False) rather than hard-deleting.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), IsStaffRole()]
+        return [IsAuthenticated(), IsAdminRole()]
 
     def get(self, request, user_id):
         user = get_object_or_404(User, id=user_id)

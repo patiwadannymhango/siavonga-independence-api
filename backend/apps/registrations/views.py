@@ -7,11 +7,13 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl.utils import get_column_letter
 from rest_framework import filters, status
-from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView
+from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.common.permissions import IsAdminRole, IsStaffRole
 
 from .models import RaceCategory, Registration
 from .serializers import (
@@ -110,7 +112,7 @@ class AdminRegistrationListView(ListAPIView):
     pagination — the data source for the admin registrations table.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffRole]
     serializer_class = AdminRegistrationSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "category"]
@@ -124,18 +126,32 @@ class AdminRegistrationListView(ListAPIView):
     queryset = Registration.objects.select_related("participant", "category")
 
 
-class AdminRegistrationDetailView(RetrieveUpdateAPIView):
+class AdminRegistrationDetailView(RetrieveUpdateDestroyAPIView):
     """
-    GET/PATCH /api/v1/admin/registrations/<id>/
+    GET    /api/v1/admin/registrations/<id>/ — any admin account (ADMIN or read-only VIEW)
 
-    PATCH only accepts {"status": "..."} — use this to flip a
-    registration to CONFIRMED once a manual/cash/bank-transfer payment
-    has been taken, or to CANCELLED/REFUNDED.
+    PATCH  /api/v1/admin/registrations/<id>/ — ADMIN only. Accepts
+    {"status": "..."} — use this to flip a registration to CONFIRMED once
+    a manual/cash/bank-transfer payment has been taken, or to
+    CANCELLED/REFUNDED.
+
+    DELETE /api/v1/admin/registrations/<id>/ — ADMIN only. Removes the
+    registration record (and any payments against it).
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
     serializer_class = AdminRegistrationSerializer
     queryset = Registration.objects.select_related("participant", "category")
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT", "DELETE"):
+            return [IsAuthenticated(), IsAdminRole()]
+        return [IsAuthenticated(), IsStaffRole()]
+
+    def perform_destroy(self, instance):
+        # Payment.registration is on_delete=PROTECT, so clear those first
+        # or Django raises ProtectedError instead of deleting.
+        instance.payments.all().delete()
+        instance.delete()
 
     def patch(self, request, *args, **kwargs):
         registration = self.get_object()
@@ -166,10 +182,10 @@ class AdminRegistrationCreateView(APIView):
     POST /api/v1/admin/registrations/manual/
 
     Manual "register a participant" — used by the admin for walk-ins,
-    phone registrations, etc.
+    phone registrations, etc. ADMIN only.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminRole]
 
     def post(self, request):
         serializer = AdminManualRegistrationSerializer(data=request.data)
@@ -188,7 +204,7 @@ class AdminDashboardView(APIView):
     status, revenue collected vs pending.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffRole]
 
     def get(self, request):
         from decimal import Decimal
@@ -235,9 +251,10 @@ class AdminRegistrationBulkUploadView(APIView):
     columns: full_name, email, phone, category_code, status (optional,
     defaults to CONFIRMED). Returns a report of created rows and any rows
     that failed, rather than failing the whole batch on one bad row.
+    ADMIN only.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminRole]
     parser_classes = [MultiPartParser]
 
     REQUIRED_COLUMNS = ["full_name", "category_code"]
@@ -328,7 +345,7 @@ class AdminRegistrationExportView(APIView):
     Streams an .xlsx of every registration.
     """
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffRole]
 
     COLUMNS = [
         ("Reference", lambda r: r.registration_number),

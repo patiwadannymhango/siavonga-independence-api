@@ -5,8 +5,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 
 
+def _role_for(user):
+    """Read-only "ADMIN" | "VIEW" derived from is_superuser — see apps/common/permissions.py."""
+    return User.Role.ADMIN if user.is_superuser else User.Role.VIEW
+
+
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
+    role = serializers.SerializerMethodField()
+
+    def get_role(self, obj):
+        return _role_for(obj)
 
     class Meta:
         model = User
@@ -17,6 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "full_name",
             "phone",
+            "role",
             "is_superuser",
             "is_staff",
         )
@@ -67,6 +77,10 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class AdminUserSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
+    role = serializers.SerializerMethodField()
+
+    def get_role(self, obj):
+        return _role_for(obj)
 
     class Meta:
         model = User
@@ -78,6 +92,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "full_name",
             "phone",
             "is_active",
+            "role",
             "is_superuser",
             "is_staff",
             "created_at",
@@ -87,6 +102,9 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
 class AdminUserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    # Required, not defaulted — every account must be explicitly given
+    # one role or the other at creation time.
+    role = serializers.ChoiceField(choices=User.Role.choices, write_only=True)
 
     class Meta:
         model = User
@@ -97,23 +115,33 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
             "last_name",
             "phone",
             "password",
-            "is_superuser",
+            "role",
         )
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        is_superuser = validated_data.get("is_superuser", False)
+        role = validated_data.pop("role")
         return User.objects.create_user(
             password=password,
             # Every admin account created here is staff by definition —
             # there's no separate "customer" account type on this backend.
             is_staff=True,
-            is_superuser=is_superuser,
+            is_superuser=(role == User.Role.ADMIN),
             **validated_data,
         )
 
 
 class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    # Optional on update (partial=True) — omit to leave the role
+    # unchanged.
+    role = serializers.ChoiceField(choices=User.Role.choices, write_only=True, required=False)
+
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "phone", "is_active", "is_superuser")
+        fields = ("first_name", "last_name", "phone", "is_active", "role")
+
+    def update(self, instance, validated_data):
+        role = validated_data.pop("role", None)
+        if role is not None:
+            instance.is_superuser = role == User.Role.ADMIN
+        return super().update(instance, validated_data)

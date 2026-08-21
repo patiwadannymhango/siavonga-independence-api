@@ -9,10 +9,21 @@ from .managers import UserManager
 class User(UUIDModel, AbstractBaseUser, PermissionsMixin):
     """
     Admin/organiser account. There is no self-registration — only an
-    existing superuser can create accounts (see AdminUserCreateView).
+    existing ADMIN can create accounts (see AdminUserCreateView).
     Runners never authenticate; the public registration/payment/lookup
     endpoints are AllowAny.
     """
+
+    class Role(models.TextChoices):
+        """
+        Not a model field — is_superuser (ADMIN) / is_staff-only (VIEW)
+        already captures the two states, so this just names them
+        consistently everywhere instead of re-deriving "ADMIN"/"VIEW"
+        strings by hand. See apps/common/permissions.py.
+        """
+
+        ADMIN = "ADMIN", "Admin"
+        VIEW = "VIEW", "View only"
 
     email = models.EmailField(unique=True, db_index=True)
     first_name = models.CharField(max_length=150)

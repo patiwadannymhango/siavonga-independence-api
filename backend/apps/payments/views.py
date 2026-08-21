@@ -4,10 +4,11 @@ from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.permissions import IsStaffRole
 from apps.registrations.models import Registration
 
 from .gateways.lipila.security import InvalidLipilaWebhook, verify_lipila_webhook
@@ -230,7 +231,7 @@ class LipilaWebhookView(APIView):
 class AdminPaymentListView(ListAPIView):
     """GET /api/v1/payments/admin/payments/"""
 
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsStaffRole]
     serializer_class = AdminPaymentSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "payment_method"]
