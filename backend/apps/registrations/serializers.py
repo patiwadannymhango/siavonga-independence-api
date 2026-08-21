@@ -237,6 +237,28 @@ class AdminRegistrationStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Registration.Status.choices)
 
 
+class AdminRaceCategorySerializer(serializers.ModelSerializer):
+    """
+    Full CRUD shape for admin race-category management — unlike the public
+    RaceCategorySerializer, this includes `is_active` so an admin can see
+    and toggle categories the public site no longer offers.
+    """
+
+    class Meta:
+        model = RaceCategory
+        fields = (
+            "id",
+            "name",
+            "code",
+            "description",
+            "distance_label",
+            "price",
+            "currency",
+            "capacity",
+            "is_active",
+        )
+
+
 class AdminManualRegistrationSerializer(serializers.Serializer):
     """
     For the admin's "register a participant" flow — walk-ins, phone

@@ -2,8 +2,6 @@ from django.db import transaction
 
 from .models import Participant, Registration
 
-REFERENCE_PREFIX = "SIR"
-
 
 @transaction.atomic
 def create_registration(
@@ -32,7 +30,6 @@ def create_registration(
     registration = Registration.objects.create(
         participant=participant,
         category=category,
-        registration_number=generate_registration_number(),
         status=status,
         amount=category.price,
         currency=category.currency,
@@ -49,30 +46,3 @@ def create_registration(
     notify_registration_received(registration)
 
     return registration
-
-
-def generate_registration_number():
-    """
-    Scanning every existing number for the max (rather than trusting the
-    most-recently-registered row) means a single malformed/blank
-    registration_number can't get "stuck" as the reference point and
-    keep producing the same already-taken number on every subsequent
-    attempt.
-    """
-
-    last_number = 0
-
-    existing_numbers = Registration.objects.exclude(registration_number="").values_list(
-        "registration_number", flat=True
-    )
-
-    for registration_number in existing_numbers:
-        try:
-            number = int(registration_number.rsplit("-", 1)[-1])
-        except (ValueError, IndexError):
-            continue
-        last_number = max(last_number, number)
-
-    next_number = last_number + 1
-
-    return f"{REFERENCE_PREFIX}-{next_number:05d}"

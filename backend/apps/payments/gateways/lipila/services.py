@@ -18,8 +18,14 @@ class LipilaGateway:
             "amount": float(payment.amount),
             "accountNumber": normalize_zm_phone(phone_number),
             "currency": payment.currency,
-            "narration": f"Siavonga Independence Run {payment.registration.registration_number}",
-            "referenceData": payment.registration.registration_number,
+            # registration_number doesn't exist yet at this point — it's
+            # only assigned once the registration is confirmed (see
+            # Registration.save()). payment.reference (also sent as
+            # referenceId) is stable from the moment payment starts, so
+            # it's what identifies this payment everywhere, including
+            # the webhook's fallback lookup.
+            "narration": f"Siavonga Independence Run — {payment.reference}",
+            "referenceData": payment.reference,
         }
 
         response = self.client.request(

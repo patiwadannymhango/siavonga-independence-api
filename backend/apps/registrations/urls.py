@@ -2,6 +2,8 @@ from django.urls import path
 
 from .views import (
     AdminDashboardView,
+    AdminRaceCategoryDetailView,
+    AdminRaceCategoryListView,
     AdminRegistrationBulkUploadView,
     AdminRegistrationCreateView,
     AdminRegistrationDetailView,
@@ -19,6 +21,8 @@ urlpatterns = [
     path("registrations/lookup/", PublicRegistrationLookupView.as_view(), name="public-registration-lookup"),
     # Admin
     path("admin/dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
+    path("admin/categories/", AdminRaceCategoryListView.as_view(), name="admin-category-list"),
+    path("admin/categories/<uuid:pk>/", AdminRaceCategoryDetailView.as_view(), name="admin-category-detail"),
     path("admin/registrations/", AdminRegistrationListView.as_view(), name="admin-registration-list"),
     path("admin/registrations/manual/", AdminRegistrationCreateView.as_view(), name="admin-registration-create"),
     path(

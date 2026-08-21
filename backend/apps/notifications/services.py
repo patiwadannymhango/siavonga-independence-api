@@ -30,13 +30,16 @@ def notify_registration_received(registration):
     _, phone = _participant_contact(registration)
     participant = registration.participant
 
+    # No reference number yet — one is only assigned once the
+    # registration is confirmed (see Registration.save()), so there's
+    # nothing to quote here. The runner can still be found by email if
+    # they need to look this up before then.
     text = (
         f"Hi {participant.full_name},\n\n"
         f"We've received your registration for {settings.EVENT_NAME}.\n"
-        f"Reference: {registration.registration_number}\n"
         f"Category: {registration.category.name}\n"
         f"Amount due: {registration.currency} {registration.amount}\n\n"
-        "Complete payment to confirm your place.\n"
+        "Complete payment to confirm your place and receive your registration reference.\n"
     )
 
     if phone:
@@ -113,11 +116,12 @@ def notify_payment_failed(registration, *, reason=""):
     _, phone = _participant_contact(registration)
     participant = registration.participant
 
+    # A failed payment never reached CONFIRMED, so there's no reference
+    # number to quote (see Registration.save()).
     text = (
         f"Hi {participant.full_name},\n\n"
         f"We couldn't confirm your payment for {settings.EVENT_NAME}"
-        f"{f' ({reason})' if reason else ''}.\n"
-        f"Reference: {registration.registration_number}\n\n"
+        f"{f' ({reason})' if reason else ''}.\n\n"
         "Please try again, or contact us for help.\n"
     )
 

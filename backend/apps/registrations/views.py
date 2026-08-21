@@ -7,7 +7,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl.utils import get_column_letter
 from rest_framework import filters, status
-from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -18,6 +18,7 @@ from apps.common.permissions import IsAdminRole, IsStaffRole
 from .models import RaceCategory, Registration
 from .serializers import (
     AdminManualRegistrationSerializer,
+    AdminRaceCategorySerializer,
     AdminRegistrationSerializer,
     AdminRegistrationStatusUpdateSerializer,
     PublicRegistrationCreateSerializer,
@@ -102,6 +103,44 @@ class PublicRegistrationLookupView(APIView):
 # ---------------------------------------------------------------------------
 # Admin-facing
 # ---------------------------------------------------------------------------
+
+
+class AdminRaceCategoryListView(ListCreateAPIView):
+    """
+    GET  /api/v1/admin/categories/ — any admin (ADMIN or VIEW). Unlike the
+    public endpoint, this includes inactive categories.
+
+    POST — ADMIN only. Create a new race category.
+    """
+
+    serializer_class = AdminRaceCategorySerializer
+    queryset = RaceCategory.objects.all()
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAdminRole()]
+        return [IsAuthenticated(), IsStaffRole()]
+
+
+class AdminRaceCategoryDetailView(RetrieveUpdateAPIView):
+    """
+    GET   /api/v1/admin/categories/<id>/ — any admin.
+    PATCH — ADMIN only. Edit a category's name, code, price, capacity, etc.,
+    or flip `is_active` to retire it from the public site.
+
+    No DELETE: Registration.category is on_delete=PROTECT, so a category
+    with existing registrations can't be hard-deleted anyway — deactivate
+    it instead.
+    """
+
+    serializer_class = AdminRaceCategorySerializer
+    queryset = RaceCategory.objects.all()
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "PUT"):
+            return [IsAuthenticated(), IsAdminRole()]
+        return [IsAuthenticated(), IsStaffRole()]
 
 
 class AdminRegistrationListView(ListAPIView):

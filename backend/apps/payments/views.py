@@ -161,6 +161,13 @@ class PublicPaymentStatusView(APIView):
             {
                 "status": payment.status,
                 "registrationStatus": payment.registration.status,
+                # Only set once the registration reaches CONFIRMED (see
+                # Registration.save()) — this is how the frontend picks
+                # up the reference the moment it's actually assigned,
+                # rather than reusing whatever it captured back when the
+                # registration was first created (nothing yet, by
+                # design).
+                "reference": payment.registration.registration_number,
             }
         )
 
@@ -193,12 +200,22 @@ class LipilaWebhookView(APIView):
         accountNumber, status ("Successful"/"Failed"), paymentType, type,
         identifier, message, externalId (optional), referenceData
         (optional) — the same shape for mobile money and card
-        collections. `referenceId` is set to our own Payment.reference
-        when creating the collection; `referenceData` carries the
-        registration number as a second, independent lookup path.
+        collections. `referenceId` and `referenceData` are both set to
+        our own Payment.reference when creating the collection (not the
+        registration number — that doesn't exist yet at this point, see
+        Registration.save()), so either one identifies the payment.
         """
 
-        candidate_refs = [v for v in (data.get("referenceId"), data.get("identifier"), data.get("externalId")) if v]
+        candidate_refs = [
+            v
+            for v in (
+                data.get("referenceId"),
+                data.get("identifier"),
+                data.get("externalId"),
+                data.get("referenceData"),
+            )
+            if v
+        ]
 
         payment = None
         for ref in candidate_refs:
@@ -207,13 +224,6 @@ class LipilaWebhookView(APIView):
             ).first()
             if payment:
                 break
-
-        if not payment and data.get("referenceData"):
-            payment = (
-                Payment.objects.filter(registration__registration_number=data["referenceData"])
-                .order_by("-created_at")
-                .first()
-            )
 
         if not payment:
             return
