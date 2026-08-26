@@ -20,7 +20,7 @@ from .serializers import (
     AdminManualRegistrationSerializer,
     AdminRaceCategorySerializer,
     AdminRegistrationSerializer,
-    AdminRegistrationStatusUpdateSerializer,
+    AdminRegistrationUpdateSerializer,
     PublicRegistrationCreateSerializer,
     RaceCategorySerializer,
     RegistrationRecordSerializer,
@@ -162,17 +162,20 @@ class AdminRegistrationListView(ListAPIView):
         "participant__phone",
     ]
     ordering_fields = ["registered_at", "amount", "status"]
-    queryset = Registration.objects.select_related("participant", "category")
+    queryset = Registration.objects.select_related("participant", "category").prefetch_related("payments")
 
 
 class AdminRegistrationDetailView(RetrieveUpdateDestroyAPIView):
     """
     GET    /api/v1/admin/registrations/<id>/ — any admin account (ADMIN or read-only VIEW)
 
-    PATCH  /api/v1/admin/registrations/<id>/ — ADMIN only. Accepts
-    {"status": "..."} — use this to flip a registration to CONFIRMED once
-    a manual/cash/bank-transfer payment has been taken, or to
-    CANCELLED/REFUNDED.
+    PATCH  /api/v1/admin/registrations/<id>/ — ADMIN only. Partial update —
+    any mix of `status` and participant/race detail fields (full_name,
+    email, phone, gender, age_range, country, t_shirt_size,
+    club_or_institution, emergency_contact_name, emergency_contact_phone,
+    medical_notes). Flipping `status` to CONFIRMED (e.g. cash paid at the
+    door, or a reconciled bank transfer) notifies the runner just like an
+    online payment would, but only on the transition into confirmed.
 
     DELETE /api/v1/admin/registrations/<id>/ — ADMIN only. Removes the
     registration record (and any payments against it).
@@ -195,14 +198,25 @@ class AdminRegistrationDetailView(RetrieveUpdateDestroyAPIView):
     def patch(self, request, *args, **kwargs):
         registration = self.get_object()
 
-        serializer = AdminRegistrationStatusUpdateSerializer(data=request.data)
+        serializer = AdminRegistrationUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-        new_status = serializer.validated_data["status"]
+        participant_updates = {k: v for k, v in data.items() if k in AdminRegistrationUpdateSerializer.PARTICIPANT_FIELDS}
+        registration_updates = {k: v for k, v in data.items() if k not in AdminRegistrationUpdateSerializer.PARTICIPANT_FIELDS}
+
+        if participant_updates:
+            for field, value in participant_updates.items():
+                setattr(registration.participant, field, value)
+            registration.participant.save(update_fields=[*participant_updates.keys()])
+
         old_status = registration.status
+        new_status = registration_updates.get("status")
 
-        registration.status = new_status
-        registration.save(update_fields=["status", "updated_at"])
+        if registration_updates:
+            for field, value in registration_updates.items():
+                setattr(registration, field, value)
+            registration.save(update_fields=[*registration_updates.keys(), "updated_at"])
 
         # Manually marking something CONFIRMED (e.g. cash paid at the
         # door, or a reconciled bank transfer) notifies the runner just

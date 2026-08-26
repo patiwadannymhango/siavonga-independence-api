@@ -6,12 +6,16 @@ from .gateways.base import get_gateway
 from .models import Payment
 
 
-def create_payment(*, registration, payment_method):
+def create_payment(*, target, payment_method):
+    from apps.registrations.models import Registration
+    from apps.vendors.models import VendorRegistration
+
     return Payment.objects.create(
-        registration=registration,
+        registration=target if isinstance(target, Registration) else None,
+        vendor_registration=target if isinstance(target, VendorRegistration) else None,
         reference=f"PAY-{uuid.uuid4().hex[:16].upper()}",
-        amount=registration.amount,
-        currency=registration.currency,
+        amount=target.amount,
+        currency=target.currency,
         payment_method=payment_method,
         status=Payment.Status.CREATED,
     )
@@ -89,28 +93,25 @@ def apply_payment_outcome(*, payment, provider_status, raw_response=None, respon
     if provider_status in SUCCESS_STATES:
         from django.utils import timezone
 
-        from apps.registrations.models import Registration
+        from apps.common.models import BaseRegistration
+
+        target = payment.target
 
         with transaction.atomic():
             payment.status = Payment.Status.SUCCESS
             payment.paid_at = timezone.now()
             payment.save(update_fields=["status", "paid_at", "updated_at"])
 
-            registration = payment.registration
-            registration.status = Registration.Status.CONFIRMED
-            registration.save(update_fields=["status", "updated_at"])
+            target.status = BaseRegistration.Status.CONFIRMED
+            target.save(update_fields=["status", "updated_at"])
 
-        from apps.notifications.services import notify_payment_confirmed
-
-        notify_payment_confirmed(payment.registration)
+        target.notify_confirmed()
 
     elif provider_status in FAILED_STATES:
         payment.status = Payment.Status.FAILED
         payment.save(update_fields=["status", "updated_at"])
 
-        from apps.notifications.services import notify_payment_failed
-
-        notify_payment_failed(payment.registration, reason=provider_status)
+        payment.target.notify_failed(reason=provider_status)
 
     # Anything else (still processing on the gateway's side) is left
     # exactly as-is: no status flip, no notification, until a definitive

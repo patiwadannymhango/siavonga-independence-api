@@ -8,8 +8,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.models import BaseRegistration
 from apps.common.permissions import IsStaffRole
 from apps.registrations.models import Registration
+from apps.vendors.models import VendorRegistration
 
 from .gateways.lipila.security import InvalidLipilaWebhook, verify_lipila_webhook
 from .models import Payment, PaymentMethod
@@ -60,7 +62,13 @@ class PublicBankDetailsView(APIView):
 
 
 class InitiatePaymentView(APIView):
-    """POST /api/v1/payments/initiate/"""
+    """
+    POST /api/v1/payments/initiate/
+
+    Shared by both runner and vendor registrations — `registrationId` is
+    looked up across both tables (their UUIDs never collide in
+    practice), so the frontend doesn't need to say which kind it is.
+    """
 
     permission_classes = [AllowAny]
 
@@ -69,16 +77,18 @@ class InitiatePaymentView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        try:
-            registration = Registration.objects.get(id=data["registrationId"])
-        except Registration.DoesNotExist:
+        target = Registration.objects.filter(id=data["registrationId"]).first() or VendorRegistration.objects.filter(
+            id=data["registrationId"]
+        ).first()
+
+        if not target:
             return Response({"detail": "Registration not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if registration.status not in (Registration.Status.PENDING_PAYMENT, Registration.Status.PAYMENT_PROCESSING):
+        if target.status not in (BaseRegistration.Status.PENDING_PAYMENT, BaseRegistration.Status.PAYMENT_PROCESSING):
             return Response({"detail": "This registration cannot accept payment."}, status=status.HTTP_400_BAD_REQUEST)
 
         method = data["paymentMethod"]
-        payment = create_payment(registration=registration, payment_method=method)
+        payment = create_payment(target=target, payment_method=method)
 
         redirect_url = ""
 
@@ -101,7 +111,7 @@ class InitiatePaymentView(APIView):
             try:
                 payment, redirect_url = initiate_card_payment(
                     payment=payment,
-                    participant=registration.participant,
+                    participant=target.contact,
                     city=data.get("city", ""),
                     address=data.get("address", ""),
                     zip_code=data.get("zipCode", ""),
@@ -123,8 +133,8 @@ class InitiatePaymentView(APIView):
             }
             payment.save(update_fields=["billing_details", "updated_at"])
 
-        registration.status = Registration.Status.PAYMENT_PROCESSING
-        registration.save(update_fields=["status", "updated_at"])
+        target.status = BaseRegistration.Status.PAYMENT_PROCESSING
+        target.save(update_fields=["status", "updated_at"])
 
         return Response(
             {
@@ -151,23 +161,24 @@ class PublicPaymentStatusView(APIView):
 
     def get(self, request, payment_id):
         try:
-            payment = Payment.objects.select_related("registration").get(id=payment_id)
+            payment = Payment.objects.select_related("registration", "vendor_registration").get(id=payment_id)
         except Payment.DoesNotExist:
             return Response({"detail": "Payment not found."}, status=status.HTTP_404_NOT_FOUND)
 
         payment = sync_payment_status(payment)
+        target = payment.target
 
         return Response(
             {
                 "status": payment.status,
-                "registrationStatus": payment.registration.status,
-                # Only set once the registration reaches CONFIRMED (see
-                # Registration.save()) — this is how the frontend picks
-                # up the reference the moment it's actually assigned,
-                # rather than reusing whatever it captured back when the
-                # registration was first created (nothing yet, by
-                # design).
-                "reference": payment.registration.registration_number,
+                "registrationStatus": target.status,
+                # Only set once the target reaches CONFIRMED (see
+                # BaseRegistration.save()) — this is how the frontend
+                # picks up the reference the moment it's actually
+                # assigned, rather than reusing whatever it captured
+                # back when the registration was first created (nothing
+                # yet, by design).
+                "reference": target.registration_number,
             }
         )
 
@@ -245,6 +256,13 @@ class AdminPaymentListView(ListAPIView):
     serializer_class = AdminPaymentSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "payment_method"]
-    search_fields = ["reference", "provider_reference", "registration__registration_number"]
+    search_fields = [
+        "reference",
+        "provider_reference",
+        "registration__registration_number",
+        "vendor_registration__registration_number",
+    ]
     ordering_fields = ["created_at", "amount"]
-    queryset = Payment.objects.select_related("registration", "registration__participant")
+    queryset = Payment.objects.select_related(
+        "registration", "registration__participant", "vendor_registration", "vendor_registration__vendor"
+    )

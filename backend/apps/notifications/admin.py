@@ -7,9 +7,10 @@ from .models import Notification
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ("recipient", "channel", "notification_type", "status", "created_at")
     list_filter = ("channel", "notification_type", "status")
-    search_fields = ("recipient", "registration__registration_number")
+    search_fields = ("recipient", "registration__registration_number", "vendor_registration__registration_number")
     readonly_fields = (
         "registration",
+        "vendor_registration",
         "channel",
         "notification_type",
         "recipient",

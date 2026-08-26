@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vendor registration confirmed</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f2ede7; font-family:Helvetica, Arial, sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2ede7; padding:32px 16px;">
+<tr>
+<td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:100%; background-color:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e1dad2;">
+
+<!-- Header -->
+<tr>
+<td align="center" style="background-color:#1a1108; padding:28px 24px;">
+<span style="font-family:Helvetica, Arial, sans-serif; font-size:18px; font-weight:bold; color:#ffffff;">{{ event_name }}</span>
+</td>
+</tr>
+
+<!-- Hero -->
+<tr>
+<td align="center" style="padding:36px 32px 8px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td width="52" height="52" align="center" valign="middle" style="background-color:#eef7f1; border-radius:50%; font-size:26px; color:#1f8f5f; font-family:Helvetica, Arial, sans-serif;">&#10003;</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td align="center" style="padding:14px 32px 4px;">
+<h1 style="margin:0; font-size:22px; line-height:1.3; color:#1a1108; font-family:Helvetica, Arial, sans-serif;">You're confirmed, {{ contact_name }}!</h1>
+</td>
+</tr>
+<tr>
+<td align="center" style="padding:8px 32px 28px;">
+<p style="margin:0; font-size:14px; line-height:1.6; color:#6e655f; font-family:Helvetica, Arial, sans-serif;">{{ business_name }}'s registration for {{ event_name }} is confirmed. This email is your proof of registration.</p>
+</td>
+</tr>
+
+<!-- Details card -->
+<tr>
+<td style="padding:0 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9f6f2; border:1px solid #e1dad2; border-radius:10px;">
+<tr>
+<td style="padding:20px 22px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Helvetica, Arial, sans-serif; font-size:13px;">
+<tr>
+<td style="padding:6px 0; color:#6e655f;">Reference</td>
+<td align="right" style="padding:6px 0; color:#1a1108; font-weight:bold;">{{ reference }}</td>
+</tr>
+<tr>
+<td style="padding:6px 0; border-top:1px solid #e1dad2; color:#6e655f;">Business name</td>
+<td align="right" style="padding:6px 0; border-top:1px solid #e1dad2; color:#1a1108; font-weight:bold;">{{ business_name }}</td>
+</tr>
+<tr>
+<td style="padding:6px 0; border-top:1px solid #e1dad2; color:#6e655f;">Category</td>
+<td align="right" style="padding:6px 0; border-top:1px solid #e1dad2; color:#1a1108; font-weight:bold;">{{ category_name }}</td>
+</tr>
+<tr>
+<td style="padding:6px 0; border-top:1px solid #e1dad2; color:#6e655f;">Amount</td>
+<td align="right" style="padding:6px 0; border-top:1px solid #e1dad2; color:#1a1108; font-weight:bold;">{{ currency }} {{ amount }}</td>
+</tr>
+{% if event_date %}
+<tr>
+<td style="padding:6px 0; border-top:1px solid #e1dad2; color:#6e655f;">Event date</td>
+<td align="right" style="padding:6px 0; border-top:1px solid #e1dad2; color:#1a1108; font-weight:bold;">{{ event_date }}</td>
+</tr>
+{% endif %}
+{% if event_location %}
+<tr>
+<td style="padding:6px 0; border-top:1px solid #e1dad2; color:#6e655f;">Venue</td>
+<td align="right" style="padding:6px 0; border-top:1px solid #e1dad2; color:#1a1108; font-weight:bold;">{{ event_location }}</td>
+</tr>
+{% endif %}
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Note -->
+<tr>
+<td style="padding:28px 32px 4px;">
+<p style="margin:0; font-size:12.5px; line-height:1.7; color:#6e655f; font-family:Helvetica, Arial, sans-serif;">Our team will be in touch with setup details closer to the date. If anything above looks wrong, just reply to this email and we'll sort it out.</p>
+</td>
+</tr>
+
+<!-- Footer -->
+<tr>
+<td style="padding:28px 32px 32px;">
+<div style="border-top:1px solid #e1dad2; padding-top:20px; text-align:center; font-family:Helvetica, Arial, sans-serif;">
+<p style="margin:0 0 4px; font-size:12px; color:#6e655f;">{{ event_name }}{% if event_location %} &middot; {{ event_location }}{% endif %}</p>
+<p style="margin:0; font-size:12px; color:#6e655f;">{{ contact_email }}{% if contact_phone %} &middot; {{ contact_phone }}{% endif %}</p>
+</div>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+</body>
+</html>

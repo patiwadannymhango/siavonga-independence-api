@@ -48,14 +48,20 @@ class InitiatePaymentSerializer(serializers.Serializer):
 
 
 class AdminPaymentSerializer(serializers.ModelSerializer):
-    registration_number = serializers.CharField(source="registration.registration_number", read_only=True)
-    participant_name = serializers.CharField(source="registration.participant.full_name", read_only=True)
+    """Covers payments for either a runner or a vendor registration —
+    see Payment.target."""
+
+    target_type = serializers.SerializerMethodField()
+    registration_number = serializers.CharField(source="target.registration_number", read_only=True)
+    participant_name = serializers.CharField(source="target.contact.full_name", read_only=True)
 
     class Meta:
         model = Payment
         fields = (
             "id",
             "registration",
+            "vendor_registration",
+            "target_type",
             "registration_number",
             "participant_name",
             "reference",
@@ -67,3 +73,6 @@ class AdminPaymentSerializer(serializers.ModelSerializer):
             "paid_at",
             "created_at",
         )
+
+    def get_target_type(self, obj):
+        return "vendor" if obj.vendor_registration_id else "runner"

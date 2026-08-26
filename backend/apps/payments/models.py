@@ -21,8 +21,17 @@ class Payment(UUIDModel):
         CANCELLED = "CANCELLED", "Cancelled"
         REFUNDED = "REFUNDED", "Refunded"
 
+    # Exactly one of these two is set — see the constraint below. Two
+    # nullable FKs rather than a GenericForeignKey: there are only ever
+    # two kinds of payment target, so contenttypes machinery would be
+    # more abstraction than the problem needs. `target` gives the
+    # gateway/webhook/notification code a single thing to call
+    # regardless of which one is set.
     registration = models.ForeignKey(
-        "registrations.Registration", on_delete=models.PROTECT, related_name="payments"
+        "registrations.Registration", on_delete=models.PROTECT, related_name="payments", null=True, blank=True
+    )
+    vendor_registration = models.ForeignKey(
+        "vendors.VendorRegistration", on_delete=models.PROTECT, related_name="payments", null=True, blank=True
     )
 
     reference = models.CharField(max_length=100, unique=True, db_index=True)
@@ -45,6 +54,20 @@ class Payment(UUIDModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(registration__isnull=False, vendor_registration__isnull=True)
+                    | models.Q(registration__isnull=True, vendor_registration__isnull=False)
+                ),
+                name="payment_exactly_one_target",
+            )
+        ]
 
     def __str__(self):
         return self.reference
+
+    @property
+    def target(self):
+        """The Registration or VendorRegistration this payment is for."""
+        return self.registration or self.vendor_registration

@@ -19,8 +19,9 @@ echo "Database is up."
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
-# Seed the two race categories on first boot (idempotent — updates in
+# Seed race + vendor categories on first boot (idempotent — updates in
 # place rather than duplicating on every restart).
 python manage.py seed_categories || true
+python manage.py seed_vendor_categories || true
 
 exec "$@"

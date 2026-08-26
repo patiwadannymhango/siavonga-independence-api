@@ -211,6 +211,7 @@ class AdminParticipantSerializer(serializers.ModelSerializer):
 class AdminRegistrationSerializer(serializers.ModelSerializer):
     participant = AdminParticipantSerializer(read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)
+    latest_payment_reference = serializers.SerializerMethodField()
 
     class Meta:
         model = Registration
@@ -228,13 +229,44 @@ class AdminRegistrationSerializer(serializers.ModelSerializer):
             "emergency_contact_name",
             "emergency_contact_phone",
             "medical_notes",
+            "latest_payment_reference",
             "registered_at",
             "updated_at",
         )
 
+    def get_latest_payment_reference(self, obj):
+        # `.all()` rather than `.order_by("-created_at").first()` so this
+        # reads from `prefetch_related("payments")` when the queryset set
+        # it up (AdminRegistrationListView) instead of firing one query per
+        # row — Payment's own Meta.ordering is already "-created_at".
+        payments = list(obj.payments.all())
+        return payments[0].reference if payments else None
 
-class AdminRegistrationStatusUpdateSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=Registration.Status.choices)
+
+class AdminRegistrationUpdateSerializer(serializers.Serializer):
+    """
+    Admin edit of an existing registration — status and/or participant/race
+    details. Every field is optional so a partial PATCH only touches what's
+    given — see AdminRegistrationDetailView.patch(). Deliberately excludes
+    `category`/`amount`/`currency`: changing race category after payment
+    has implications for the amount owed that this simple field-by-field
+    edit isn't meant to reconcile.
+    """
+
+    status = serializers.ChoiceField(choices=Registration.Status.choices, required=False)
+    full_name = serializers.CharField(max_length=200, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    gender = serializers.ChoiceField(choices=Participant.Gender.choices, required=False, allow_blank=True)
+    age_range = serializers.ChoiceField(choices=Participant.AgeRange.choices, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    t_shirt_size = serializers.ChoiceField(choices=Registration.TShirtSize.choices, required=False, allow_blank=True)
+    club_or_institution = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    emergency_contact_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    emergency_contact_phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    medical_notes = serializers.CharField(required=False, allow_blank=True)
+
+    PARTICIPANT_FIELDS = ("full_name", "email", "phone", "gender", "age_range", "country")
 
 
 class AdminRaceCategorySerializer(serializers.ModelSerializer):

@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.registrations",
+    "apps.vendors",
     "apps.payments",
     "apps.notifications",
 ]

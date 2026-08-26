@@ -1,6 +1,6 @@
 from django.db import models
 
-from apps.common.models import UUIDModel
+from apps.common.models import BaseRegistration, UUIDModel
 
 
 class RaceCategory(UUIDModel):
@@ -52,15 +52,7 @@ class Participant(UUIDModel):
         return self.full_name
 
 
-class Registration(UUIDModel):
-    class Status(models.TextChoices):
-        PENDING_PAYMENT = "PENDING_PAYMENT", "Pending Payment"
-        PAYMENT_PROCESSING = "PAYMENT_PROCESSING", "Payment Processing"
-        CONFIRMED = "CONFIRMED", "Confirmed"
-        CANCELLED = "CANCELLED", "Cancelled"
-        EXPIRED = "EXPIRED", "Expired"
-        REFUNDED = "REFUNDED", "Refunded"
-
+class Registration(BaseRegistration):
     class TShirtSize(models.TextChoices):
         XS = "XS", "XS"
         S = "S", "S"
@@ -77,15 +69,6 @@ class Registration(UUIDModel):
     participant = models.ForeignKey(Participant, on_delete=models.PROTECT, related_name="registrations")
     category = models.ForeignKey(RaceCategory, on_delete=models.PROTECT, related_name="registrations")
 
-    # Blank until the registration is CONFIRMED — see save() below. Left
-    # unassigned rather than reserved at creation so an abandoned/failed
-    # registration never permanently "uses up" a number in the sequence.
-    registration_number = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True, default=None)
-    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING_PAYMENT)
-
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
-    currency = models.CharField(max_length=3, default="ZMW")
-
     t_shirt_size = models.CharField(max_length=10, choices=TShirtSize.choices, blank=True)
     club_or_institution = models.CharField(max_length=200, blank=True)
     emergency_contact_name = models.CharField(max_length=200, blank=True)
@@ -93,51 +76,30 @@ class Registration(UUIDModel):
     medical_notes = models.TextField(blank=True)
     accepted_terms = models.BooleanField(default=False)
 
-    registered_at = models.DateTimeField(auto_now_add=True)
-
     class Meta:
         ordering = ["-registered_at"]
-
-    def __str__(self):
-        return self.registration_number or f"unconfirmed-{self.id}"
 
     @property
     def full_name(self):
         return self.participant.full_name
 
-    def save(self, *args, **kwargs):
-        if self.status == self.Status.CONFIRMED and not self.registration_number:
-            self.registration_number = self._generate_registration_number()
+    @property
+    def contact(self):
+        """The person to reach for this registration — generic name used
+        by payment code shared with VendorRegistration."""
+        return self.participant
 
-            update_fields = kwargs.get("update_fields")
-            if update_fields is not None:
-                kwargs["update_fields"] = list(update_fields) + ["registration_number"]
+    def notify_received(self):
+        from apps.notifications.services import notify_registration_received
 
-        super().save(*args, **kwargs)
+        notify_registration_received(self)
 
-    @classmethod
-    def _generate_registration_number(cls):
-        """
-        Scanning every existing number for the max (rather than trusting
-        the most-recently-confirmed row) means a single malformed
-        registration_number can't get "stuck" as the reference point and
-        keep producing the same already-taken number on every subsequent
-        attempt.
-        """
+    def notify_confirmed(self):
+        from apps.notifications.services import notify_payment_confirmed
 
-        last_number = 0
+        notify_payment_confirmed(self)
 
-        existing_numbers = cls.objects.exclude(registration_number__isnull=True).values_list(
-            "registration_number", flat=True
-        )
+    def notify_failed(self, *, reason=""):
+        from apps.notifications.services import notify_payment_failed
 
-        for registration_number in existing_numbers:
-            try:
-                number = int(registration_number.rsplit("-", 1)[-1])
-            except (ValueError, IndexError):
-                continue
-            last_number = max(last_number, number)
-
-        next_number = last_number + 1
-
-        return f"{cls.REFERENCE_PREFIX}-{next_number:05d}"
+        notify_payment_failed(self, reason=reason)

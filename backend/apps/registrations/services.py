@@ -41,8 +41,6 @@ def create_registration(
         accepted_terms=details.get("accepted_terms", False),
     )
 
-    from apps.notifications.services import notify_registration_received
-
-    notify_registration_received(registration)
+    registration.notify_received()
 
     return registration

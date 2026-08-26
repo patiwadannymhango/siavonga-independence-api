@@ -14,9 +14,13 @@ from django.utils import timezone
 from .models import Notification
 
 
-def send_email(*, to, subject, text_body, html_body=None, registration=None, notification_type=Notification.NotificationType.CUSTOM):
+def send_email(*, to, subject, text_body, html_body=None, target=None, notification_type=Notification.NotificationType.CUSTOM):
+    from apps.registrations.models import Registration
+    from apps.vendors.models import VendorRegistration
+
     notification = Notification.objects.create(
-        registration=registration,
+        registration=target if isinstance(target, Registration) else None,
+        vendor_registration=target if isinstance(target, VendorRegistration) else None,
         channel=Notification.Channel.EMAIL,
         notification_type=notification_type,
         recipient=to,
