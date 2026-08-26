@@ -4,7 +4,7 @@ import openpyxl
 from django.http import HttpResponse
 from openpyxl.utils import get_column_letter
 from rest_framework import filters, status
-from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,7 +17,7 @@ from .serializers import (
     AdminManualVendorRegistrationSerializer,
     AdminVendorCategorySerializer,
     AdminVendorRegistrationSerializer,
-    AdminVendorRegistrationStatusUpdateSerializer,
+    AdminVendorRegistrationUpdateSerializer,
     PublicVendorRegistrationCreateSerializer,
     VendorCategorySerializer,
     VendorRegistrationRecordSerializer,
@@ -136,34 +136,56 @@ class AdminVendorRegistrationListView(ListAPIView):
         "vendor__phone",
     ]
     ordering_fields = ["registered_at", "amount", "status"]
-    queryset = VendorRegistration.objects.select_related("vendor", "category")
+    queryset = VendorRegistration.objects.select_related("vendor", "category").prefetch_related("payments")
 
 
-class AdminVendorRegistrationDetailView(RetrieveUpdateAPIView):
+class AdminVendorRegistrationDetailView(RetrieveUpdateDestroyAPIView):
     """
-    GET   /api/v1/vendors/admin/registrations/<id>/ — any admin
-    PATCH — ADMIN only. Accepts {"status": "..."}.
+    GET    /api/v1/vendors/admin/registrations/<id>/ — any admin account
+
+    PATCH  /api/v1/vendors/admin/registrations/<id>/ — ADMIN only. Partial
+    update — any mix of `status` and vendor/registration detail fields.
+    Mirrors apps.registrations.views.AdminRegistrationDetailView.patch().
+
+    DELETE /api/v1/vendors/admin/registrations/<id>/ — ADMIN only.
     """
 
     serializer_class = AdminVendorRegistrationSerializer
     queryset = VendorRegistration.objects.select_related("vendor", "category")
 
     def get_permissions(self):
-        if self.request.method in ("PATCH", "PUT"):
+        if self.request.method in ("PATCH", "PUT", "DELETE"):
             return [IsAuthenticated(), IsAdminRole()]
         return [IsAuthenticated(), IsStaffRole()]
+
+    def perform_destroy(self, instance):
+        instance.payments.all().delete()
+        instance.delete()
 
     def patch(self, request, *args, **kwargs):
         vendor_registration = self.get_object()
 
-        serializer = AdminVendorRegistrationStatusUpdateSerializer(data=request.data)
+        serializer = AdminVendorRegistrationUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-        new_status = serializer.validated_data["status"]
+        vendor_updates = {k: v for k, v in data.items() if k in AdminVendorRegistrationUpdateSerializer.VENDOR_FIELDS}
+        registration_updates = {
+            k: v for k, v in data.items() if k not in AdminVendorRegistrationUpdateSerializer.VENDOR_FIELDS
+        }
+
+        if vendor_updates:
+            for field, value in vendor_updates.items():
+                setattr(vendor_registration.vendor, field, value)
+            vendor_registration.vendor.save(update_fields=[*vendor_updates.keys()])
+
         old_status = vendor_registration.status
+        new_status = registration_updates.get("status")
 
-        vendor_registration.status = new_status
-        vendor_registration.save(update_fields=["status", "updated_at"])
+        if registration_updates:
+            for field, value in registration_updates.items():
+                setattr(vendor_registration, field, value)
+            vendor_registration.save(update_fields=[*registration_updates.keys(), "updated_at"])
 
         if new_status == VendorRegistration.Status.CONFIRMED and old_status != new_status:
             vendor_registration.notify_confirmed()

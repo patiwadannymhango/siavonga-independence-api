@@ -174,8 +174,13 @@ class AdminVendorSerializer(serializers.ModelSerializer):
 
 
 class AdminVendorRegistrationSerializer(serializers.ModelSerializer):
+    """Mirrors apps.registrations.serializers.AdminRegistrationSerializer's
+    shape, including latest_payment_reference, for a consistent admin
+    dashboard experience across both registration types."""
+
     vendor = AdminVendorSerializer(read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)
+    latest_payment_reference = serializers.SerializerMethodField()
 
     class Meta:
         model = VendorRegistration
@@ -190,13 +195,38 @@ class AdminVendorRegistrationSerializer(serializers.ModelSerializer):
             "category_name",
             "products_services",
             "requirement",
+            "latest_payment_reference",
             "registered_at",
             "updated_at",
         )
 
+    def get_latest_payment_reference(self, obj):
+        payments = list(obj.payments.all())
+        return payments[0].reference if payments else None
 
-class AdminVendorRegistrationStatusUpdateSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=VendorRegistration.Status.choices)
+
+class AdminVendorRegistrationUpdateSerializer(serializers.Serializer):
+    """
+    Admin edit of an existing vendor registration — status and/or
+    vendor/registration details. Mirrors
+    apps.registrations.serializers.AdminRegistrationUpdateSerializer.
+    Every field optional so a partial PATCH only touches what's given.
+    Deliberately excludes `category`/`amount`/`currency` for the same
+    reason as the runner version.
+    """
+
+    status = serializers.ChoiceField(choices=VendorRegistration.Status.choices, required=False)
+    business_name = serializers.CharField(max_length=200, required=False)
+    full_name = serializers.CharField(max_length=200, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    business_location = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    products_services = serializers.CharField(required=False, allow_blank=True)
+    requirement = serializers.ChoiceField(
+        choices=VendorRegistration.Requirement.choices, required=False, allow_blank=True
+    )
+
+    VENDOR_FIELDS = ("business_name", "full_name", "email", "phone", "business_location")
 
 
 class AdminManualVendorRegistrationSerializer(serializers.Serializer):
